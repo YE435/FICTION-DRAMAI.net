@@ -1,0 +1,32 @@
+# Framework & Server
+fastapi
+uvicorn[standard]
+supabase
+python-dotenv
+pydantic
+pydantic-settings
+itsdangerous
+
+# --- LlamaIndex (RAG framework) ---
+# llama-index
+# qdrant-client
+# openai
+llama-index-core==0.14.5
+llama-index-llms-openai==0.6.5
+llama-index-embeddings-openai==0.5.1
+llama-index-vector-stores-qdrant==0.8.6
+llama-index-embeddings-huggingface==0.6.1
+
+# --- Vector DB ---
+qdrant-client==1.15.1
+
+# --- Embedding backend ---
+openai==1.108.1
+
+# --- Utilities ---
+tqdm
+nest_asyncio
+typing-extensions
+
+# --- JWT ---
+PyJWT[crypto]

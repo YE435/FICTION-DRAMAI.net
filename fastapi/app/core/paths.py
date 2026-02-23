@@ -1,0 +1,4 @@
+# core/paths.py # FastAPI의 루트 지정
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent

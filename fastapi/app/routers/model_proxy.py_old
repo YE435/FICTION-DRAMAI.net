@@ -1,0 +1,124 @@
+# routers/model_proxy.py # 프로토타입v1용 임시 라우트
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from app.services import character_service
+from app.model.perchat_proto import get_model_response
+from app.utils.uuid_utils import new_uuid
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+# 요청 스키마
+class ChatRequest(BaseModel):
+    message: str
+    charac_id: str  # 프론트에서 캐릭터 uuid만 전달 # 이후 현재 대화방 첫 번째 chatter의 charac_id(perchat_id 아님!)를 전달하게 해 주기
+
+@router.post("/ai")
+async def chat_with_model(req: ChatRequest):
+    """
+    사용자의 대화 요청을 받아:
+    1) 캐릭터 정보 조회 → system prompt 생성
+    2) LLM 호출 후 결과 반환
+    """
+    print("받은 요청 확인", req.message, req.charac_id)
+    # 1) 캐릭터 정보 불러오기 # charac_id > perchat_id, drama_id > drama_name (25.10.22)
+    char_data = character_service.get_character(req.charac_id)
+    if not char_data:
+        raise HTTPException(status_code=404, detail="Character not found")
+    print("캐릭터 정보 불러옴", char_data.keys())
+    # 2) 캐릭터 프롬프트 조립
+    # charac_desc는 인물 설명, actor는 배우 이름
+    character_prompt = (
+        # f'너는 드라마 {char_data["drama_id"]}의 등장인물 {char_data["charac_name"]}이야. '
+        f'너는 드라마 <미스터션샤인>의 등장인물 {char_data["charac_name"]}(이)야.'
+        f'배우 {char_data["actor"]}가 연기했어.\n'
+        '이제부터 사용자와 일상적인 대화를 할 거야. 앞으로 사용자가 하는 말에 지문과 대사를 포함한 시나리오 형식으로 대답해.'
+        '답변은 보통 지문 하나와 대사 한 쌍으로만 구성하고, 최대 10줄 이하로 짧게 해. 너라는 인물이 할 법한 말과 행동만 제시해.'
+        '상황 및 행동 묘사와 관련된 지문은 *지문*꼴로 보여 주고, 대사는 특별한 표시 없이 일반 텍스트로 보여 줘.'
+        '너에 대한 자세한 정보는 아래와 같아.'
+        f'{char_data["charac_desc"]}\n\n'
+    )  
+    print("프롬프트:", character_prompt[:20])
+    # drama_id가 아니라 drama_name이 들어가야 함!!
+
+    # 3) 모델 응답 생성
+    reply = get_model_response(
+        user_message=req.message,
+        charac_id=char_data["charac_id"],
+        character_prompt=character_prompt
+    )
+    print("응답:", reply)
+    # 4) 결과 반환
+    # return {"reply": reply, "character": char_data["charac_name"]}
+    return [
+        {
+            "id" : new_uuid(),
+            "name": 가져온페르챗데이터["perchat_name"],
+            "from": "you" or "me",
+            "text": reply
+        }
+    ]
+#-------------------------------------------------------------------------
+# perchat_id 이용 
+# routers/model_proxy.py # 프로토타입v1용 임시 라우트
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from app.services import perchat_service, user_service, chat_db_service
+from app.model.perchat_proto import get_model_response
+from app.deps import auth_deps
+from app.utils.uuid_utils import new_uuid
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+# 요청 스키마
+class ChatRequest(BaseModel):
+    message: str
+    perchat_id: str
+
+@router.post("/")
+async def chat_with_model(
+    req: ChatRequest,
+    token_user_uuid: str = Depends(auth_deps.get_current_user_uuid)
+):
+    """
+    사용자의 대화 요청을 받아:
+    1) 캐릭터 정보 조회 → system_prompt
+    2) LLM 호출 후 결과 반환
+    """
+    print("받은 요청 확인", req.message, req.perchat_id)
+    # 1) 페르챗 정보 불러오기
+    
+    perchat = perchat_service.get_perchat(req.perchat_id)
+    if not perchat:
+        raise HTTPException(status_code=404, detail="페르챗을 찾을 수 없습니다.")
+    print("페르챗 정보 불러옴", perchat.keys())  # 에러 확인용 # 추후 삭제
+    # 2) system_prompt
+    system_prompt = perchat["prompt_full"] 
+    print("프롬프트:", system_prompt[:20]) # 에러 확인용 # 추후 삭제
+
+    # 3) 사용자 nick 불러오기
+    user_uuid=token_user_uuid
+    nick = user_service.get_user(user_uuid)["nick"]
+    # 4) 모델 응답 생성
+    reply = get_model_response(
+        user_message=req.message,
+        perchat_id=perchat["perchat_id"],
+        system_prompt=system_prompt
+    )
+    print("응답:", reply)
+    # 5) 결과 반환
+    # return {"reply": reply, "character": char_data["charac_name"]}
+    return [
+        {
+            "id" : new_uuid(),
+            "name": nick,
+            "from": "me",
+            "text": req.message
+        },
+        {
+            "id" : new_uuid(),
+            "name": perchat["perchat_name"],
+            "from": "you",
+            "text": reply
+        }
+    ]
+

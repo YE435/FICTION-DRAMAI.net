@@ -1,0 +1,83 @@
+# version: "3.9"  # Compose V2부터는 version 필드 무시함
+
+services:
+  # Qdrant (Vector DB)
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST
+      - "6334:6334"   # gRPC
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+
+  # FastAPI (모델/DB 접근 단일 창구)
+  fastapi:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    container_name: fastapi
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+    env_file:
+      - ./fastapi/.env           # ← DB/Qdrant 등 비밀값은 여기에만
+    environment:
+      - PORT=${FASTAPI_PORT}     # 포트만 루트 .env에서 치환
+      # - PYTHONUNBUFFERED=1     # print 실시간 출력
+    ports:
+      - "${FASTAPI_PORT}:8000"
+    volumes:
+      - ./fastapi:/app           # 개발용 코드 마운트(원하면 유지)
+    # command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload  # 자동 리로드
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug # 내부 파싱 예외도 보기
+
+  # Node.js (API Gateway)
+  node:
+    build:
+      context: ./node
+    container_name: node
+    restart: unless-stopped
+    depends_on:
+      - fastapi
+    env_file:
+      - .env
+    # environment:
+    #   - PORT=${NODE_PORT}
+    #   - FASTAPI_URL=${FASTAPI_URL}   # 비밀 아님
+    ports:
+      - "${NODE_PORT}:4000"
+    volumes:
+      - ./node:/app
+      - /app/node_modules            # node_modules 분리(충돌 방지)
+
+  # React (프론트엔드 - vite 추가 후 수정)
+  react:
+    build:
+      context: ./react
+      dockerfile: Dockerfile
+    container_name: react
+    ports:
+      - "${REACT_PORT}:3000"
+    env_file:
+      - .env
+    depends_on:
+      - node
+    restart: unless-stopped
+
+  # React (프론트엔드)
+  # react:
+  #   build:
+  #     context: ./react
+  #   container_name: react
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - node
+  #   environment:
+  #     - VITE_API_BASE=http://localhost:${NODE_PORT}   # 브라우저에서 호출할 API URL
+  #   ports:
+  #     - "${REACT_PORT}:5173"
+  #   volumes:
+  #     - ./react:/app
+  #     - /app/node_modules
