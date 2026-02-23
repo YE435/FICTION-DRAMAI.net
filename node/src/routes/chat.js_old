@@ -1,0 +1,51 @@
+// routes/chat.js // 프로토타입v1용 임시 라우트
+import express from "express";
+import axios from "axios";
+import { FASTAPI_URL } from "../config/env.js";
+
+const router = express.Router();
+
+// router.post("/ai", async (req, res) => {
+//   const { message } = req.body;
+//   try {
+//     // FastAPI의 임시 모델 라우트로 요청
+//     const response = await axios.post("http://fastapi:8000/model/chat", { message });
+//     // FastAPI 응답 중 reply 필드만 프론트로 반환
+//     res.json({ reply: response.data.reply });
+//   } catch (err) {
+//     console.error("FastAPI 요청 실패:", err.message);
+//     res.status(500).json({ error: "FastAPI 통신 실패" });
+//   }
+// });
+
+router.post("/ai", async (req, res) => {
+  const { message, perchat_id } = req.body;
+
+  // ① chara_id가 없으면 기본값 설정
+  const perchatId = perchat_id || "fc538e48-00b7-4a05-a6b1-b74162e041ee" // 테스트용 유진 초이 uuid
+  // 추후 room_id 보내면 fast api에서 찾도록 작업해줄 것
+
+  try {
+    // ② FastAPI로 message + chara_id 함께 전달
+    const response = await axios.post(
+      `${FASTAPI_URL}/chat/ai`,
+      {
+        message,
+        perchat_id: perchatId // 항상 보냄
+      }
+    );
+    console.log(`${FASTAPI_URL}/chat/ai`);
+    // FastAPI 응답 중 reply 필드만 프론트로 반환
+    // res.json({ 
+    //   reply: response.data.reply });
+    // FastAPI 응답 전체 객체 배열로 반환
+    res.json({ 
+      reply: response.data.reply });
+  } catch (err) {
+    console.error("FastAPI 요청 실패:", err.message);
+    res.status(500).json({ error: "FastAPI 통신 실패" });
+  }
+});
+
+
+export default router;
